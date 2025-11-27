@@ -18,4 +18,4 @@ rm mpiigaze.zip
 
 cd ..
 
-python3 create_csv.py
+python3 -m datasets.create_csv

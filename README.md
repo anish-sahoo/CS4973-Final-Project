@@ -24,9 +24,10 @@ Dataset - https://www.kaggle.com/datasets/dhruv413/mpiigaze
    pip install -r requirements.txt
    ```
 
-2. Download MPIIGaze dataset and prepare a CSV:
-   - Format: left_img_path,right_img_path,pitch,yaw,head_pitch,head_yaw
-   - left/right paths should point to the eye crop images (or whole face crops if you modify loader accordingly)
+2. Download MPIIGaze dataset and prepare a CSV (two-eye):
+   - Format: image_path,l_x1,l_y1,l_x2,l_y2,r_x1,r_y1,r_x2,r_y2,pitch,yaw,head_pitch,head_yaw
+   - Each image_path points to a full frame in `Data/Original`. Bounding boxes define left & right eye crop.
+   - Use `datasets/create_two_eye_csv.py` to generate `data/mpiigaze_two_eye.csv` from original `annotation.txt` files.
 
 3. Train: (TBD)
 

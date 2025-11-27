@@ -27,7 +27,11 @@ IMG_ROOT = os.path.join(DATA_DIR, 'MPIIGaze', 'Data', 'Original')
 OUTPUT = os.path.join(DATA_DIR, 'mpiigaze_landmarks.csv')
 
 # Default CSV path to dataset labels (set to None to use RandomEyeDataset fallback)
-CSV_PATH = None
+CSV_PATH = os.path.join(DATA_DIR, 'mpiigaze_two_eye.csv')
+
+# Mediapipe face mesh indices for head pose estimation (6pt model)
+# [nose_tip, left_eye_outer, right_eye_outer, left_mouth, right_mouth, chin]
+HEAD_POSE_LANDMARKS = [1, 33, 263, 61, 291, 199]
 
 # Debug mode: if True, uses a smaller dataset to step through the pipeline
 DEBUG = False

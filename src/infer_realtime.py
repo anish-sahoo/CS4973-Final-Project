@@ -3,19 +3,19 @@ import mediapipe as mp
 import torch
 import numpy as np
 from models.gaze_model import GazeNet
-from utils import draw_point_on_frame
-from calibration import CalibrationRegressor
+from utils import draw_point_on_frame, crop_eye_from_frame, extract_eye_landmarks, estimate_head_pose
+from calibration.calibration import Calibration
 
 mp_face_mesh = mp.solutions.face_mesh
 
 class RealtimeGazeEngine:
-    def __init__(self, model_path, device='cpu', img_size=(60,36)):
+    def __init__(self, model_path, device='cpu', img_size=(36,60)):
         self.device = device
         self.img_size = img_size
         self.cap = cv2.VideoCapture(0)
         self.face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refine_landmarks=True)
         self.model = GazeNet()
-        self.model.load_state_dict(torch.load(model_path, map_location=device)['model'])
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
         self.model.to(device).eval()
         self.calib = None
 
@@ -60,12 +60,12 @@ class RealtimeGazeEngine:
         # We'll pick sets roughly around the eyes (coarse)
         left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]  # approximate
         right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
-        def lm_list(idxs):
-            return [(lm.landmark[i].x, lm.landmark[i].y) for i in idxs]
-        left_crop = self._crop_eye(frame, lm_list(left_idxs))
-        right_crop = self._crop_eye(frame, lm_list(right_idxs))
-        # head pose approximation: use nose tip vs. face center? We'll use simple placeholder zeros
-        head = np.array([0.0, 0.0], dtype=np.float32)
+        left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
+        left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
+        right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
+        # head pose estimation using 6-point model
+        head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
+        head = np.array([head_pitch, head_yaw], dtype=np.float32)
         # to torch
         left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
         right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
@@ -74,7 +74,7 @@ class RealtimeGazeEngine:
             pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
         return pred  # pitch,yaw
 
-    def set_calibration(self, calib: CalibrationRegressor):
+    def set_calibration(self, calib: Calibration):
         self.calib = calib
 
     def predict_screen_point(self, gaze_pred):
@@ -93,8 +93,8 @@ if __name__ == '__main__':
 
     engine = RealtimeGazeEngine(args.model, device='cpu')
     if args.calib:
-        from calibration.calibration import CalibrationRegressor
-        c = CalibrationRegressor()
+        from calibration.calibration import Calibration
+        c = Calibration()
         c.load(args.calib)
         engine.set_calibration(c)
 

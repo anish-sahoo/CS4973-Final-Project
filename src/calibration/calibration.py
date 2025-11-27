@@ -18,3 +18,12 @@ class Calibration:
         x = gv @ self.Ax
         y = gv @ self.Ay
         return np.array([x, y])
+
+    def save(self, path):
+        # save coefficient vectors
+        np.savez(path, Ax=self.Ax, Ay=self.Ay)
+
+    def load(self, path):
+        d = np.load(path)
+        self.Ax = d['Ax']
+        self.Ay = d['Ay']

@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import math
 
 def rad2deg(x):
     return x * 180.0 / np.pi
@@ -9,3 +10,81 @@ def deg2rad(x):
 
 def draw_point_on_frame(frame, x, y, color=(0,0,255)):
     cv2.circle(frame, (int(x), int(y)), 8, color, -1)
+
+def crop_eye_from_frame(frame, lm_coords, img_size=(36,60), w_pad=0.15):
+    # lm_coords: list of (x_norm, y_norm) in [0,1] relative to image
+    h, w = frame.shape[:2]
+    xs = [int(x * w) for x,y in lm_coords]
+    ys = [int(y * h) for x,y in lm_coords]
+    x1, x2 = max(min(xs), 0), min(max(xs), w-1)
+    y1, y2 = max(min(ys), 0), min(max(ys), h-1)
+    pad_x = int((x2-x1)*w_pad) + 2
+    pad_y = int((y2-y1)*w_pad) + 2
+    x1 = max(x1-pad_x, 0)
+    x2 = min(x2+pad_x, w-1)
+    y1 = max(y1-pad_y, 0)
+    y2 = min(y2+pad_y, h-1)
+    crop = frame[y1:y2, x1:x2]
+    crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    crop = cv2.resize(crop, (img_size[1], img_size[0]))
+    crop = crop.astype(np.float32)/255.0
+    crop = (crop - 0.5)/0.5
+    crop = np.expand_dims(crop, axis=0)  # channel dim
+    return crop
+
+def extract_eye_landmarks(face_landmarks, left_idxs, right_idxs):
+    def lm_list(idxs):
+        return [(face_landmarks.landmark[i].x, face_landmarks.landmark[i].y) for i in idxs]
+    return lm_list(left_idxs), lm_list(right_idxs)
+
+def estimate_head_pose(face_landmarks, image_shape, camera_matrix=None, dist_coeffs=None):
+    """Estimate head pitch and yaw using solvePnP with a 6-point face model.
+
+    face_landmarks: mediapipe face landmarks object
+    image_shape: (height, width)
+    Returns: head_pitch, head_yaw (radians)
+    """
+    import config
+    import numpy as np
+    import cv2
+
+    inds = getattr(config, 'HEAD_POSE_LANDMARKS', None)
+    if inds is None or len(inds) < 6:
+        return 0.0, 0.0
+    h, w = image_shape
+    # approximate 3D model points (in mm) — using OpenCV sample model
+    model_points = np.array([
+        (0.0, 0.0, 0.0),  # nose tip
+        (-225.0, 170.0, -135.0),  # left eye outer
+        (225.0, 170.0, -135.0),   # right eye outer
+        (-150.0, -150.0, -125.0), # left mouth
+        (150.0, -150.0, -125.0),  # right mouth
+        (0.0, -330.0, -65.0)      # chin
+    ], dtype=np.float32)
+
+    image_points = []
+    for i in inds:
+        lm = face_landmarks.landmark[i]
+        x = int(lm.x * w)
+        y = int(lm.y * h)
+        image_points.append((x,y))
+    image_points = np.array(image_points, dtype=np.float32)
+
+    # if not provided, construct a basic camera_matrix
+    if camera_matrix is None:
+        focal_length = w
+        camera_matrix = np.array([[focal_length, 0, w/2.0], [0, focal_length, h/2.0], [0,0,1]], dtype=np.float32)
+    if dist_coeffs is None:
+        dist_coeffs = np.zeros((4,1))
+    # solvePnP
+    try:
+        success, rvec, tvec = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+        if not success:
+            return 0.0, 0.0
+        R, _ = cv2.Rodrigues(rvec)
+        Zv = R[:, 2]
+        head_pitch = math.asin(Zv[1])
+        head_yaw = math.atan2(Zv[0], Zv[2])
+        return float(head_pitch), float(head_yaw)
+    except Exception:
+        return 0.0, 0.0
