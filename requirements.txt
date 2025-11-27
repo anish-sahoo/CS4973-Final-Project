@@ -1,7 +1,11 @@
-torch
+torch>=2.0
 torchvision
-tensorboard
-matplotlib
+opencv-python
+mediapipe
 numpy
-pillow
-requests
+pandas
+tqdm
+matplotlib
+scikit-learn
+pyyaml
+pyautogui

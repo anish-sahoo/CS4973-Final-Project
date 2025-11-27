@@ -1,3 +1,5 @@
+
+import os
 """
 Global configuration for device selection and common hyperparameters.
 Single variable change to select device: set DEVICE = 'cuda' or 'mps' or 'cpu'
@@ -19,10 +21,13 @@ DATA_DIR = 'data'
 LOG_DIR = 'runs'
 CHECKPOINT_DIR = 'checkpoints'
 
+# MPIIGaze specific paths
+ANNOT_DIR = os.path.join(DATA_DIR, 'MPIIGaze', 'Annotation Subset')
+IMG_ROOT = os.path.join(DATA_DIR, 'MPIIGaze', 'Data', 'Original')
+OUTPUT = os.path.join(DATA_DIR, 'mpiigaze_landmarks.csv')
+
 # Default CSV path to dataset labels (set to None to use RandomEyeDataset fallback)
 CSV_PATH = None
 
 # Debug mode: if True, uses a smaller dataset to step through the pipeline
 DEBUG = False
-
-# Add other config variables as needed
