@@ -17,7 +17,6 @@ from torch import nn
 import torch.optim as optim
 
 from models.eye_gaze_net import build_model
-from data.dataset import SimpleEyeDataset, RandomEyeDataset
 from utils.visualizer import Visualizer
 from utils.device import get_device
 import config
