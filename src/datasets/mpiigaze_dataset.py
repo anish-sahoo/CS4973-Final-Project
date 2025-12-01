@@ -15,6 +15,8 @@ class MPIIGazeDataset(Dataset):
         self.img_size = img_size
         self.transform = transform or transforms.Compose([
             transforms.Resize(self.img_size),
+            transforms.RandomRotation(5),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5], std=[0.5])
         ])

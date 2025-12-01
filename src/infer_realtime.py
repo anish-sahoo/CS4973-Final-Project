@@ -48,31 +48,36 @@ class RealtimeGazeEngine:
         return crop
 
     def predict_frame(self, frame):
-        # returns gaze pitch,yaw (radians)
-        h, w = frame.shape[:2]
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(img_rgb)
-        if not results.multi_face_landmarks:
+        try:
+            # returns gaze pitch,yaw (radians)
+            h, w = frame.shape[:2]
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.face_mesh.process(img_rgb)
+            if not results.multi_face_landmarks:
+                return np.array([0.0, 0.0], dtype=np.float32)
+            lm = results.multi_face_landmarks[0]
+            # landmarks indices around eyes (MediaPipe iris/eyes):
+            # left eye approx: landmarks 33..133 region; iris: 468..471; right eye similar
+            # We'll pick sets roughly around the eyes (coarse)
+            left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]  # approximate
+            right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
+            left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
+            left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
+            right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
+            # head pose estimation using 6-point model
+            head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
+            head = np.array([head_pitch, head_yaw], dtype=np.float32)
+            # to torch
+            left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
+            right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
+            head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
+            with torch.no_grad():
+                pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
+            return pred  # pitch,yaw
+        except Exception as e:
+            print(f"Prediction error: {e}")
             return np.array([0.0, 0.0], dtype=np.float32)
-        lm = results.multi_face_landmarks[0]
-        # landmarks indices around eyes (MediaPipe iris/eyes):
-        # left eye approx: landmarks 33..133 region; iris: 468..471; right eye similar
-        # We'll pick sets roughly around the eyes (coarse)
-        left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]  # approximate
-        right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
-        left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
-        left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
-        right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
-        # head pose estimation using 6-point model
-        head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
-        head = np.array([head_pitch, head_yaw], dtype=np.float32)
-        # to torch
-        left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
-        right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
-        head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
-        with torch.no_grad():
-            pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
-        return pred  # pitch,yaw
+
 
     def set_calibration(self, calib: Calibration):
         self.calib = calib
