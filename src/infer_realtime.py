@@ -1,112 +1,140 @@
+import os
+import sys
+# Add project root to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import cv2
 import mediapipe as mp
 import torch
 import numpy as np
+from pathlib import Path
+
+import config
 from models.gaze_model import GazeNet
-from utils import draw_point_on_frame, crop_eye_from_frame, extract_eye_landmarks, estimate_head_pose
-from calibration.calibration import Calibration
+from utils import draw_point_on_frame, crop_eye_from_frame, extract_eye_landmarks, estimate_head_pose, draw_gaze
 
 mp_face_mesh = mp.solutions.face_mesh
 
 class RealtimeGazeEngine:
-    def __init__(self, model_path, device='cpu', img_size=(36,60)):
-        self.device = device
+    def __init__(self, model_path, device=None, img_size=(36,60)):
+        self.device = device if device else torch.device(config.DEVICE if config.DEVICE != 'auto' else ('cuda' if torch.cuda.is_available() else 'cpu'))
         self.img_size = img_size
         self.cap = cv2.VideoCapture(0)
-        self.face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refine_landmarks=True)
+        
+        self.face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=False, 
+            max_num_faces=1, 
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        print(f"Loading model from {model_path}...")
         self.model = GazeNet()
-        self.model.load_state_dict(torch.load(model_path, map_location=device))
-        self.model.to(device).eval()
-        self.calib = None
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+        self.model.to(self.device).eval()
+        print(f"Model loaded on {self.device}")
 
-    def read_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            raise RuntimeError("Webcam read error")
-        return frame
+    def run(self):
+        print("Starting inference loop. Press 'q' to exit.")
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                print("Failed to read from webcam")
+                break
 
-    def _crop_eye(self, frame, lm_coords, w_pad=0.15):
-        # lm_coords: list of (x_norm, y_norm) landmarks bounding the eye; using min/max to crop
-        h, w = frame.shape[:2]
-        xs = [int(x * w) for x,y in lm_coords]
-        ys = [int(y * h) for x,y in lm_coords]
-        x1, x2 = max(min(xs), 0), min(max(xs), w-1)
-        y1, y2 = max(min(ys), 0), min(max(ys), h-1)
-        # pad
-        pad_x = int((x2-x1)*w_pad) + 2
-        pad_y = int((y2-y1)*w_pad) + 2
-        x1 = max(x1-pad_x, 0)
-        x2 = min(x2+pad_x, w-1)
-        y1 = max(y1-pad_y, 0)
-        y2 = min(y2+pad_y, h-1)
-        crop = frame[y1:y2, x1:x2]
-        crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        crop = cv2.resize(crop, self.img_size)
-        crop = crop.astype(np.float32)/255.0
-        crop = (crop - 0.5)/0.5
-        crop = np.expand_dims(crop, axis=0) # channel dim
-        return crop
+            # Flip frame horizontally for mirror effect
+            frame = cv2.flip(frame, 1)
+            h, w = frame.shape[:2]
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            results = self.face_mesh.process(img_rgb)
+            
+            if results.multi_face_landmarks:
+                lm = results.multi_face_landmarks[0]
+                
+                # Extract eye landmarks
+                # MediaPipe indices
+                left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]
+                right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
+                
+                left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
+                
+                # Crop eyes
+                left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
+                right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
+                
+                # Estimate head pose
+                head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
+                head = np.array([head_pitch, head_yaw], dtype=np.float32)
+                
+                # Prepare tensors
+                left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
+                right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
+                head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
+                
+                # Inference
+                with torch.no_grad():
+                    # Output is [pitch, yaw]
+                    pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
+                
+                gaze_pitch, gaze_yaw = pred[0], pred[1]
+                
+                # Visualize
+                # Draw eyes
+                for x, y in left_lm:
+                    draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
+                for x, y in right_lm:
+                    draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
+                
+                # Draw gaze direction
+                draw_gaze(frame, gaze_pitch, gaze_yaw, color=(0, 0, 255))
+                
+                # Display values
+                cv2.putText(frame, f"Gaze: P={gaze_pitch:.2f}, Y={gaze_yaw:.2f}", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"Head: P={head_pitch:.2f}, Y={head_yaw:.2f}", (10, 60), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    def predict_frame(self, frame):
-        # returns gaze pitch,yaw (radians)
-        h, w = frame.shape[:2]
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(img_rgb)
-        if not results.multi_face_landmarks:
-            return np.array([0.0, 0.0], dtype=np.float32)
-        lm = results.multi_face_landmarks[0]
-        # landmarks indices around eyes (MediaPipe iris/eyes):
-        # left eye approx: landmarks 33..133 region; iris: 468..471; right eye similar
-        # We'll pick sets roughly around the eyes (coarse)
-        left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]  # approximate
-        right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
-        left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
-        left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
-        right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
-        # head pose estimation using 6-point model
-        head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
-        head = np.array([head_pitch, head_yaw], dtype=np.float32)
-        # to torch
-        left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
-        right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
-        head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
-        with torch.no_grad():
-            pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
-        return pred  # pitch,yaw
+            cv2.imshow('Realtime Gaze Tracking', frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        
+        self.cap.release()
+        cv2.destroyAllWindows()
 
-    def set_calibration(self, calib: Calibration):
-        self.calib = calib
-
-    def predict_screen_point(self, gaze_pred):
-        if self.calib is None:
-            return None
-        xy = self.calib.predict(gaze_pred.reshape(1,2))[0]
-        return tuple(int(x) for x in xy)
+def find_best_model():
+    """Find the best model in the checkpoints directory."""
+    checkpoint_dir = Path(config.CHECKPOINT_DIR)
+    if not checkpoint_dir.exists():
+        return None
+        
+    # Try to find 'gaze_best_complete.pth' first, then 'gaze_best_short.pth'
+    models = [
+        checkpoint_dir / 'gaze_best_complete.pth',
+        checkpoint_dir / 'gaze_final_complete.pth',
+        checkpoint_dir / 'gaze_best_short.pth',
+        checkpoint_dir / 'gaze_final_short.pth'
+    ]
+    
+    for model_path in models:
+        if model_path.exists():
+            return str(model_path)
+            
+    # Fallback to any .pth file
+    pth_files = list(checkpoint_dir.glob('*.pth'))
+    if pth_files:
+        return str(pth_files[0])
+        
+    return None
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', required=True)
-    parser.add_argument('--calib', default=None)
-    parser.add_argument('--show', action='store_true')
-    args = parser.parse_args()
-
-    engine = RealtimeGazeEngine(args.model, device='cpu')
-    if args.calib:
-        from calibration.calibration import Calibration
-        c = Calibration()
-        c.load(args.calib)
-        engine.set_calibration(c)
-
-    while True:
-        frame = engine.read_frame()
-        gaze = engine.predict_frame(frame)
-        if engine.calib is not None:
-            pt = engine.predict_screen_point(gaze)
-            if pt is not None:
-                draw_point_on_frame(frame, pt[0], pt[1])
-        cv2.imshow("gaze", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    engine.cap.release()
-    cv2.destroyAllWindows()
+    model_path = find_best_model()
+    
+    if not model_path:
+        print(f"No model found in {config.CHECKPOINT_DIR}. Please run training first.")
+        sys.exit(1)
+        
+    engine = RealtimeGazeEngine(model_path)
+    engine.run()

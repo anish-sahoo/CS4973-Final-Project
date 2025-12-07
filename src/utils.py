@@ -88,3 +88,18 @@ def estimate_head_pose(face_landmarks, image_shape, camera_matrix=None, dist_coe
         return float(head_pitch), float(head_yaw)
     except Exception:
         return 0.0, 0.0
+
+def draw_gaze(frame, pitch, yaw, thickness=2, color=(0, 255, 0), length=200):
+    """Draw gaze vector on the frame."""
+    h, w = frame.shape[:2]
+    # Start point (center of image for now, or use face center)
+    cx, cy = w // 2, h // 2
+    
+    # Calculate end point
+    # pitch is rotation around x-axis (up/down)
+    # yaw is rotation around y-axis (left/right)
+    dx = -length * np.sin(yaw)
+    dy = -length * np.sin(pitch)
+    
+    cv2.arrowedLine(frame, (cx, cy), (int(cx + dx), int(cy + dy)), color, thickness, tipLength=0.3)
+

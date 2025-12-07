@@ -30,6 +30,9 @@ Dataset - https://www.kaggle.com/datasets/dhruv413/mpiigaze
    - Use `utils/create_two_eye_csv.py` to generate `data/mpiigaze_two_eye.csv`
 
 3. Train: (TBD)
+```
+tensorboard --logdir runs
+```
 
 4. Calibrate: (TBD)
 

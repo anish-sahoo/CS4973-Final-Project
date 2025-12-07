@@ -10,11 +10,16 @@ Single variable change to select device: set DEVICE = 'cuda' or 'mps' or 'cpu'
 DEVICE = 'auto'
 
 # Training defaults
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 LR = 1e-3
-EPOCHS = 10
-LOG_INTERVAL = 10  # how often (in steps) to log
-PLOT_SAVE_INTERVAL = 100  # how often to save the png plots (in steps)
+EPOCHS = 30
+LOG_INTERVAL = 50  # how often (in steps) to log
+PLOT_SAVE_INTERVAL = 1  # how often to save the png plots (in epochs)
+
+# Training Mode: 'short' (quick test on small subset) or 'complete' (full dataset)
+TRAIN_MODE = 'complete'
+# Tensorboard: True to enable logging, False to disable
+USE_TENSORBOARD = True
 
 # Paths
 DATA_DIR = 'data'
