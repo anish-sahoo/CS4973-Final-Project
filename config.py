@@ -13,6 +13,8 @@ DEVICE = 'auto'
 BATCH_SIZE = 64
 LR = 1e-3
 EPOCHS = 30
+NUM_WORKERS = 4  # Number of subprocesses for data loading
+PIN_MEMORY = True  # Speeds up data transfer to CUDA
 LOG_INTERVAL = 50  # how often (in steps) to log
 PLOT_SAVE_INTERVAL = 1  # how often to save the png plots (in epochs)
 

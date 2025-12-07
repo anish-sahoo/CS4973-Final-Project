@@ -104,7 +104,13 @@ def train():
         raise ValueError(f"Invalid mode: {mode}. Choose 'short' or 'complete'.")
     
     # Create dataloader
-    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=True)
+    loader = DataLoader(
+        dataset, 
+        batch_size=config.BATCH_SIZE, 
+        shuffle=True,
+        num_workers=config.NUM_WORKERS,
+        pin_memory=config.PIN_MEMORY
+    )
     
     # Initialize model
     print("Initializing model...")
