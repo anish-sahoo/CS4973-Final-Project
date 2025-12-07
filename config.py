@@ -10,12 +10,12 @@ Single variable change to select device: set DEVICE = 'cuda' or 'mps' or 'cpu'
 DEVICE = 'auto'
 
 # Training defaults
-BATCH_SIZE = 64
+BATCH_SIZE = 512  # Increased for 4090
 LR = 1e-3
 EPOCHS = 30
-NUM_WORKERS = 4  # Number of subprocesses for data loading
+NUM_WORKERS = 8  # Increased workers
 PIN_MEMORY = True  # Speeds up data transfer to CUDA
-LOG_INTERVAL = 50  # how often (in steps) to log
+LOG_INTERVAL = 10  # Log more frequently since batches are larger
 PLOT_SAVE_INTERVAL = 1  # how often to save the png plots (in epochs)
 
 # Training Mode: 'short' (quick test on small subset) or 'complete' (full dataset)

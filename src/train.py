@@ -41,19 +41,28 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
     total_loss = 0
     num_batches = len(train_loader)
     
+    # Initialize GradScaler for mixed precision training
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == 'cuda'))
+    
     progress_bar = tqdm(enumerate(train_loader), total=num_batches, desc=f"Epoch {epoch+1}")
     
     for batch_idx, (left_imgs, right_imgs, head, gaze) in progress_bar:
-        left_imgs = left_imgs.to(device)
-        right_imgs = right_imgs.to(device)
-        head = head.to(device)
-        gaze = gaze.to(device)
+        left_imgs = left_imgs.to(device, non_blocking=True)
+        right_imgs = right_imgs.to(device, non_blocking=True)
+        head = head.to(device, non_blocking=True)
+        gaze = gaze.to(device, non_blocking=True)
         
         optimizer.zero_grad()
-        pred = model(left_imgs, right_imgs, head)
-        loss = criterion(pred, gaze)
-        loss.backward()
-        optimizer.step()
+        
+        # Mixed precision context
+        with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+            pred = model(left_imgs, right_imgs, head)
+            loss = criterion(pred, gaze)
+        
+        # Scale loss and backward
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         
         batch_loss = loss.item()
         total_loss += batch_loss
@@ -83,6 +92,10 @@ def train():
     device = get_device()
     setup_directories()
     
+    # Enable cuDNN benchmark for optimized performance on fixed input sizes
+    if device.type == 'cuda':
+        torch.backends.cudnn.benchmark = True
+    
     # Initialize visualizer
     visualizer = TrainingVisualizer(log_dir=config.LOG_DIR, tb_enabled=use_tensorboard)
     
@@ -109,7 +122,9 @@ def train():
         batch_size=config.BATCH_SIZE, 
         shuffle=True,
         num_workers=config.NUM_WORKERS,
-        pin_memory=config.PIN_MEMORY
+        pin_memory=config.PIN_MEMORY,
+        persistent_workers=True,
+        prefetch_factor=2
     )
     
     # Initialize model
