@@ -42,7 +42,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
     num_batches = len(train_loader)
     
     # Initialize GradScaler for mixed precision training
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == 'cuda'))
+    scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
     
     progress_bar = tqdm(enumerate(train_loader), total=num_batches, desc=f"Epoch {epoch+1}")
     
@@ -55,7 +55,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
         optimizer.zero_grad()
         
         # Mixed precision context
-        with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+        with torch.amp.autocast('cuda', enabled=(device.type == 'cuda')):
             pred = model(left_imgs, right_imgs, head)
             loss = criterion(pred, gaze)
         
