@@ -12,8 +12,8 @@ DEVICE = 'auto'
 # Training defaults
 BATCH_SIZE = 512  # Increased for 4090
 LR = 1e-3
-EPOCHS = 30
-NUM_WORKERS = 12  # Increased workers
+EPOCHS = 40
+NUM_WORKERS = 16  # Increased workers
 PIN_MEMORY = True  # Speeds up data transfer to CUDA
 LOG_INTERVAL = 10  # Log more frequently since batches are larger
 PLOT_SAVE_INTERVAL = 1  # how often to save the png plots (in epochs)
