@@ -34,6 +34,50 @@ Dataset - https://www.kaggle.com/datasets/dhruv413/mpiigaze
 tensorboard --logdir runs
 ```
 
-4. Calibrate: (TBD)
+1. Calibrate:
 
-5. Real-time demo: (TBD)
+After training, you have to calibrate the gaze tracking model to your specific screen and seating position. It maps the raw gaze vectors (Pitch/Yaw) predicted by the neural network to 2D pixel coordinates on your monitor.
+
+### Prerequisites
+
+1.  **Trained Model**: You must have a trained model checkpoint (e.g., `checkpoints/gaze_best_complete.pth`). Run the training pipeline first if you haven't.
+2.  **Webcam**: A working webcam connected to your computer.
+3.  **Screen**: The calibration script assumes you are running it on the screen you intend to track.
+
+### How to Run
+
+Run the interactive calibration UI from the project root:
+
+```bash
+python3 src/calibration.py
+```
+
+### The Calibration Process
+
+1.  **Initialization**: The script will load your best model and open a full-screen window.
+2.  **9-Point Grid**: You will be presented with a sequence of 9 targets (Red Circles) covering the screen (corners, edges, and center).
+3.  **Capture**:
+    *   Look steadily at the **Red Circle**.
+    *   Press the **SPACEBAR**.
+    *   The circle will turn **Green** for 1 second while it collects gaze samples.
+    *   Once finished, the next target will appear.
+4.  **Fitting**: After all 9 points are collected, the system calculates a mapping function (Polynomial Regression).
+5.  **Testing**: The system immediately enters "Test Mode". A green crosshair/circle will appear on screen indicating where the model thinks you are looking.
+6.  **Save**: The calibration parameters are automatically saved to `calibration.pkl` in the current directory.
+
+### Controls
+
+*   **SPACE**: Start capturing samples for the current target.
+*   **ESC**: Abort calibration and exit.
+*   **q**: Quit the test mode after calibration.
+
+### Tips for Best Accuracy
+
+*   **Lighting**: Ensure your face is evenly lit. Avoid strong backlighting (windows behind you).
+*   **Stability**: Try to keep your head relatively still during calibration, though the model is robust to some head movement.
+*   **Distance**: Sit at a comfortable, normal working distance (approx. 50-70cm) and try to maintain that distance.
+*   **Eyes**: Open your eyes normally. Squinting or widening them unnaturally can affect predictions.
+
+
+demo.py
+1. Real-time demo: (TBD)

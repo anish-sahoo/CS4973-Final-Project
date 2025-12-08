@@ -35,6 +35,57 @@ class RealtimeGazeEngine:
         self.model.to(self.device).eval()
         print(f"Model loaded on {self.device}")
 
+    def get_gaze(self, frame):
+        """
+        Process a single frame and return gaze vector (pitch, yaw).
+        Returns None if face not detected.
+        """
+        # Flip frame horizontally for mirror effect
+        frame = cv2.flip(frame, 1)
+        h, w = frame.shape[:2]
+        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        results = self.face_mesh.process(img_rgb)
+        
+        if not results.multi_face_landmarks:
+            return None, frame
+
+        lm = results.multi_face_landmarks[0]
+        
+        # Extract eye landmarks
+        left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]
+        right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
+        
+        left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
+        
+        # Crop eyes
+        left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
+        right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
+        
+        # Estimate head pose
+        head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
+        head = np.array([head_pitch, head_yaw], dtype=np.float32)
+        
+        # Prepare tensors
+        left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
+        right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
+        head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
+        
+        # Inference
+        with torch.no_grad():
+            pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
+        
+        gaze_pitch, gaze_yaw = pred[0], pred[1]
+        
+        # Visualization (optional, can be moved out)
+        for x, y in left_lm:
+            draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
+        for x, y in right_lm:
+            draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
+        draw_gaze(frame, gaze_pitch, gaze_yaw, color=(0, 0, 255))
+        
+        return (gaze_pitch, gaze_yaw), frame
+
     def run(self):
         print("Starting inference loop. Press 'q' to exit.")
         while True:
@@ -43,58 +94,12 @@ class RealtimeGazeEngine:
                 print("Failed to read from webcam")
                 break
 
-            # Flip frame horizontally for mirror effect
-            frame = cv2.flip(frame, 1)
-            h, w = frame.shape[:2]
-            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            gaze, frame = self.get_gaze(frame)
             
-            results = self.face_mesh.process(img_rgb)
-            
-            if results.multi_face_landmarks:
-                lm = results.multi_face_landmarks[0]
-                
-                # Extract eye landmarks
-                # MediaPipe indices
-                left_idxs = [33, 133, 160, 159, 158, 144, 145, 153, 154]
-                right_idxs = [263, 362, 387, 386, 385, 373, 374, 380, 381]
-                
-                left_lm, right_lm = extract_eye_landmarks(lm, left_idxs, right_idxs)
-                
-                # Crop eyes
-                left_crop = crop_eye_from_frame(frame, left_lm, img_size=self.img_size)
-                right_crop = crop_eye_from_frame(frame, right_lm, img_size=self.img_size)
-                
-                # Estimate head pose
-                head_pitch, head_yaw = estimate_head_pose(lm, (h,w))
-                head = np.array([head_pitch, head_yaw], dtype=np.float32)
-                
-                # Prepare tensors
-                left_t = torch.from_numpy(left_crop).unsqueeze(0).to(self.device).float()
-                right_t = torch.from_numpy(right_crop).unsqueeze(0).to(self.device).float()
-                head_t = torch.from_numpy(head).unsqueeze(0).to(self.device).float()
-                
-                # Inference
-                with torch.no_grad():
-                    # Output is [pitch, yaw]
-                    pred = self.model(left_t, right_t, head_t).cpu().numpy().squeeze(0)
-                
-                gaze_pitch, gaze_yaw = pred[0], pred[1]
-                
-                # Visualize
-                # Draw eyes
-                for x, y in left_lm:
-                    draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
-                for x, y in right_lm:
-                    draw_point_on_frame(frame, x*w, y*h, color=(0, 255, 0))
-                
-                # Draw gaze direction
-                draw_gaze(frame, gaze_pitch, gaze_yaw, color=(0, 0, 255))
-                
-                # Display values
+            if gaze:
+                gaze_pitch, gaze_yaw = gaze
                 cv2.putText(frame, f"Gaze: P={gaze_pitch:.2f}, Y={gaze_yaw:.2f}", (10, 30), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Head: P={head_pitch:.2f}, Y={head_yaw:.2f}", (10, 60), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
             cv2.imshow('Realtime Gaze Tracking', frame)
             

@@ -23,6 +23,10 @@ TRAIN_MODE = 'complete'
 # Tensorboard: True to enable logging, False to disable
 USE_TENSORBOARD = True
 
+# Evaluation defaults
+EVAL_SAMPLE_SIZE = 1000
+EVAL_BATCH_SIZE = 64
+
 # Paths
 DATA_DIR = 'data'
 LOG_DIR = 'runs'

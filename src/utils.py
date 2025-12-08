@@ -103,3 +103,26 @@ def draw_gaze(frame, pitch, yaw, thickness=2, color=(0, 255, 0), length=200):
     
     cv2.arrowedLine(frame, (cx, cy), (int(cx + dx), int(cy + dy)), color, thickness, tipLength=0.3)
 
+def pitchyaw_to_vector(pitch, yaw):
+    """Convert pitch and yaw to 3D vector."""
+    vector = np.zeros((3, pitch.shape[0]))
+    vector[0, :] = np.cos(pitch) * np.sin(yaw)
+    vector[1, :] = np.sin(pitch)
+    vector[2, :] = np.cos(pitch) * np.cos(yaw)
+    return vector.T
+
+def compute_angular_error(pred, target):
+    """Compute angular error between predicted and target gaze vectors."""
+    pred_v = pitchyaw_to_vector(pred[:, 0], pred[:, 1])
+    target_v = pitchyaw_to_vector(target[:, 0], target[:, 1])
+    
+    # Dot product
+    dot_product = np.sum(pred_v * target_v, axis=1)
+    
+    # Clamp to [-1, 1] to avoid numerical errors
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Angular error in degrees
+    angular_error = np.arccos(dot_product) * 180.0 / np.pi
+    return angular_error
+
