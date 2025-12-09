@@ -3,11 +3,34 @@ import numpy as np
 import sys
 import os
 import pyautogui
+import subprocess
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.infer_realtime import RealtimeGazeEngine, find_best_model
 from calibration import Calibration
+
+def get_displays():
+    """Get list of connected displays (works on macOS with xrandr or system_profiler)."""
+    try:
+        # Try macOS first
+        result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], 
+                              capture_output=True, text=True, timeout=5)
+        if 'Resolution' in result.stdout:
+            return True  # Multiple displays detected
+    except:
+        pass
+    
+    try:
+        # Try Linux/X11
+        result = subprocess.run(['xrandr', '--query'], 
+                              capture_output=True, text=True, timeout=5)
+        connected = result.stdout.count(' connected')
+        return connected > 1
+    except:
+        pass
+    
+    return False
 
 def main():
     print("==================================================")
@@ -32,11 +55,10 @@ def main():
         calib.load(calib_path)
     else:
         print("Warning: 'calibration.pkl' not found in current directory.")
-        print("Please run 'python src/calibration/calibrate_ui.py' first.")
-        print("Running in uncalibrated mode (visualization only).")
+        print("Please run 'python src/calibration.py' first.")
+        print("Running in uncalibrated mode.")
         calib = None
-
-    # 3. Setup UI
+        
     try:
         screen_w, screen_h = pyautogui.size()
     except:
@@ -44,12 +66,15 @@ def main():
 
     window_name = "Gaze Tracker Demo"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    # Set to full screen
+    
+    # Set to fullscreen but allow moving to other displays with keyboard shortcut
+    fullscreen_mode = True
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     print("\nControls:")
     print("  q: Quit")
     print("  c: Recalibrate (launches calibration tool)")
+    print("  f: Toggle fullscreen mode")
 
     # Smoothing buffer
     history = []
@@ -91,9 +116,10 @@ def main():
             cv2.line(canvas, (avg_x-20, avg_y), (avg_x+20, avg_y), (0, 255, 0), 2)
             cv2.line(canvas, (avg_x, avg_y-20), (avg_x, avg_y+20), (0, 255, 0), 2)
             
-            # Display Coordinates
+            # Display Coordinates (top right corner)
             coord_text = f"Screen: ({avg_x}, {avg_y})"
-            cv2.putText(canvas, coord_text, (50, 150),
+            text_size = cv2.getTextSize(coord_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+            cv2.putText(canvas, coord_text, (screen_w - text_size[0] - 50, 50),
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         elif gaze:
@@ -127,6 +153,10 @@ def main():
                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
         cv2.putText(canvas, "Press 'q' to quit", (50, 100), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+        cv2.putText(canvas, "Press 'c' to calibrate", (50, 130), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+        cv2.putText(canvas, "Press 'f' to toggle fullscreen", (50, 160), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
 
         cv2.imshow(window_name, canvas)
         
@@ -138,9 +168,18 @@ def main():
             engine.cap.release()
             cv2.destroyAllWindows()
             print("Launching calibration...")
-            os.system("python3 src/calibration/calibrate_ui.py")
+            os.system("python3 src/calibration.py")
             # Restart this script to reload calibration
             os.execv(sys.executable, ['python3'] + sys.argv)
+        elif key == ord('f'):
+            # Toggle fullscreen mode
+            fullscreen_mode = not fullscreen_mode
+            if fullscreen_mode:
+                cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            else:
+                cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+                # Move window to center for easier repositioning
+                cv2.moveWindow(window_name, 100, 100)
 
     engine.cap.release()
     cv2.destroyAllWindows()

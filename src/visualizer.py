@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import json
+import numpy as np
 from pathlib import Path
+from scipy import stats
 from torch.utils.tensorboard import SummaryWriter
 
 class TrainingVisualizer:
@@ -134,14 +136,13 @@ class TrainingVisualizer:
                 smoothed, lower_bound, upper_bound = self._smooth_with_confidence(
                     self.metrics['step_losses'], window_size
                 )
-                steps_smoothed = self.metrics['steps'][:len(smoothed)]
                 
                 # Plot smoothed line
-                ax2.plot(steps_smoothed, smoothed, 
+                ax2.plot(self.metrics['steps'], smoothed, 
                         label='Smoothed Loss', color='red', linewidth=2)
                 
                 # Plot 95% confidence interval
-                ax2.fill_between(steps_smoothed, lower_bound, upper_bound, 
+                ax2.fill_between(self.metrics['steps'], lower_bound, upper_bound, 
                                 color='red', alpha=0.2, 
                                 label='95% Confidence Interval')
         
@@ -150,11 +151,11 @@ class TrainingVisualizer:
         ax2.set_title('Training Progress (Step-level)', fontsize=14, fontweight='bold')
         ax2.legend(fontsize=10)
         ax2.grid(True, alpha=0.3)
-        ax2.set_ylim(0, 0.2)  # Limit y-axis from 0 to 0.2
+        ax2.set_ylim(0, 0.1)
         
         # Plot 3: Evaluation Metrics
         if self.metrics['val_error']:
-            eval_epochs = [i for i, e in enumerate(self.metrics['epoch']) if i < len(self.metrics['val_error'])]
+            eval_epochs = list(range(len(self.metrics['val_error'])))
             ax3_twin = ax3.twinx()
             
             # Plot angular error on left axis
@@ -163,6 +164,7 @@ class TrainingVisualizer:
             ax3.set_xlabel('Epoch', fontsize=12)
             ax3.set_ylabel('Angular Error (degrees)', fontsize=12, color='red')
             ax3.tick_params(axis='y', labelcolor='red')
+            ax3.set_ylim(0, 4)
             
             # Plot accuracies on right axis
             line2 = ax3_twin.plot(eval_epochs, self.metrics['val_acc_5'], 
@@ -171,12 +173,12 @@ class TrainingVisualizer:
                                  label='Acc @ 10°', marker='^', color='blue', linewidth=2)
             ax3_twin.set_ylabel('Accuracy (%)', fontsize=12, color='blue')
             ax3_twin.tick_params(axis='y', labelcolor='blue')
-            ax3_twin.set_ylim(80, 100)  # Limit accuracy axis from 80% to 100%
+            ax3_twin.set_ylim(87.5, 100)
             
             # Combine legends
             lines = line1 + line2 + line3
             labels = [l.get_label() for l in lines]
-            ax3.legend(lines, labels, fontsize=10, loc='upper left')
+            ax3.legend(lines, labels, fontsize=10, loc='lower right')
             ax3.set_title('Evaluation Metrics', fontsize=14, fontweight='bold')
             ax3.grid(True, alpha=0.3)
         
@@ -202,6 +204,9 @@ class TrainingVisualizer:
     def _smooth_with_confidence(self, values, window_size, confidence=0.95):
         """Moving average smoothing with confidence intervals.
         
+        Applies smoothing and calculates confidence intervals based on 
+        residuals from the smoothed line, not raw variance.
+        
         Args:
             values: List of values to smooth
             window_size: Size of the moving window
@@ -210,28 +215,43 @@ class TrainingVisualizer:
         Returns:
             smoothed, lower_bound, upper_bound
         """
-        import numpy as np
-        from scipy import stats
-        
         smoothed = []
+        
+        # Use centered window for better alignment
+        half_window = window_size // 2
+        
+        # First pass: compute smoothed values
+        for i in range(len(values)):
+            start = max(0, i - half_window)
+            end = min(len(values), i + half_window + 1)
+            window = values[start:end]
+            smoothed.append(np.mean(window))
+        
+        # Second pass: compute residuals and confidence intervals
+        residuals = [values[i] - smoothed[i] for i in range(len(values))]
+        
         lower_bounds = []
         upper_bounds = []
         
-        for i in range(len(values) - window_size + 1):
-            window = values[i:i + window_size]
-            mean = np.mean(window)
-            std = np.std(window)
-            n = len(window)
+        for i in range(len(values)):
+            # Get residuals in the window around this point
+            start = max(0, i - half_window)
+            end = min(len(values), i + half_window + 1)
+            window_residuals = residuals[start:end]
             
-            # Calculate 95% confidence interval using t-distribution
-            # t-value for 95% confidence with n-1 degrees of freedom
-            t_value = stats.t.ppf((1 + confidence) / 2, n - 1)
-            margin = t_value * (std / np.sqrt(n))
+            # Calculate margin from residual std
+            std = np.std(window_residuals)
+            n = len(window_residuals)
             
-            smoothed.append(mean)
-            lower_bounds.append(mean - margin)
-            upper_bounds.append(mean + margin)
-        
+            if n > 1:
+                t_value = stats.t.ppf((1 + confidence) / 2, n - 1)
+                margin = t_value * (std / np.sqrt(n))
+            else:
+                margin = 0
+            
+            lower_bounds.append(smoothed[i] - margin)
+            upper_bounds.append(smoothed[i] + margin)
+
         return smoothed, lower_bounds, upper_bounds
 
     def plot_at_interval(self, epoch, interval):
