@@ -20,7 +20,9 @@ class TrainingVisualizer:
         self.metrics = {
             'train_loss': [],
             'val_loss': [],
-            'epoch': []
+            'epoch': [],
+            'step_losses': [],  # Track loss at each step
+            'steps': []  # Track step numbers
         }
         
         self.tb_enabled = tb_enabled
@@ -55,6 +57,10 @@ class TrainingVisualizer:
 
     def log_train_loss(self, loss, epoch, step=None):
         """Log training loss."""
+        if step is not None:
+            self.metrics['step_losses'].append(loss)
+            self.metrics['steps'].append(step)
+            
         if self.tb_enabled and self.writer:
             if step is not None:
                 self.writer.add_scalar('Loss/train_step', loss, step)
@@ -77,7 +83,7 @@ class TrainingVisualizer:
 
     def plot(self, save_path=None):
         """
-        Generate and save training plot.
+        Generate and save training plots.
         
         Args:
             save_path: Path to save the plot. If None, uses default plot_file.
@@ -85,21 +91,52 @@ class TrainingVisualizer:
         if save_path is None:
             save_path = self.plot_file
         
-        plt.figure(figsize=(10, 6))
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
         
+        # Plot 1: Loss vs Epoch
         if self.metrics['epoch'] and self.metrics['train_loss']:
-            plt.plot(self.metrics['epoch'], self.metrics['train_loss'], 
+            ax1.plot(self.metrics['epoch'], self.metrics['train_loss'], 
                     label='Training Loss', marker='o', linestyle='-', linewidth=2)
         
         if self.metrics['epoch'] and self.metrics['val_loss']:
-            plt.plot(self.metrics['epoch'], self.metrics['val_loss'], 
+            ax1.plot(self.metrics['epoch'], self.metrics['val_loss'], 
                     label='Validation Loss', marker='s', linestyle='--', linewidth=2)
         
-        plt.xlabel('Epoch', fontsize=12)
-        plt.ylabel('Loss', fontsize=12)
-        plt.title('Training Progress', fontsize=14, fontweight='bold')
-        plt.legend(fontsize=10)
-        plt.grid(True, alpha=0.3)
+        ax1.set_xlabel('Epoch', fontsize=12)
+        ax1.set_ylabel('Loss', fontsize=12)
+        ax1.set_title('Training Progress (Epoch-level)', fontsize=14, fontweight='bold')
+        ax1.legend(fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        
+        # Plot 2: Loss vs Training Steps
+        if self.metrics['steps'] and self.metrics['step_losses']:
+            ax2.plot(self.metrics['steps'], self.metrics['step_losses'], 
+                    label='Training Loss', color='blue', alpha=0.3, linewidth=0.5)
+            
+            # Add a smoothed version with confidence intervals
+            if len(self.metrics['step_losses']) > 100:
+                window_size = min(100, len(self.metrics['step_losses']) // 10)
+                smoothed, lower_bound, upper_bound = self._smooth_with_confidence(
+                    self.metrics['step_losses'], window_size
+                )
+                steps_smoothed = self.metrics['steps'][:len(smoothed)]
+                
+                # Plot smoothed line
+                ax2.plot(steps_smoothed, smoothed, 
+                        label='Smoothed Loss', color='red', linewidth=2)
+                
+                # Plot 95% confidence interval
+                ax2.fill_between(steps_smoothed, lower_bound, upper_bound, 
+                                color='red', alpha=0.2, 
+                                label='95% Confidence Interval')
+        
+        ax2.set_xlabel('Training Steps', fontsize=12)
+        ax2.set_ylabel('Loss', fontsize=12)
+        ax2.set_title('Training Progress (Step-level)', fontsize=14, fontweight='bold')
+        ax2.legend(fontsize=10)
+        ax2.grid(True, alpha=0.3)
+        
         plt.tight_layout()
         
         try:
@@ -109,6 +146,50 @@ class TrainingVisualizer:
             print(f"Error saving plot: {e}")
         finally:
             plt.close()
+    
+    def _smooth(self, values, window_size):
+        """Simple moving average smoothing."""
+        import numpy as np
+        smoothed = []
+        for i in range(len(values) - window_size + 1):
+            window = values[i:i + window_size]
+            smoothed.append(np.mean(window))
+        return smoothed
+    
+    def _smooth_with_confidence(self, values, window_size, confidence=0.95):
+        """Moving average smoothing with confidence intervals.
+        
+        Args:
+            values: List of values to smooth
+            window_size: Size of the moving window
+            confidence: Confidence level (default 0.95 for 95% CI)
+        
+        Returns:
+            smoothed, lower_bound, upper_bound
+        """
+        import numpy as np
+        from scipy import stats
+        
+        smoothed = []
+        lower_bounds = []
+        upper_bounds = []
+        
+        for i in range(len(values) - window_size + 1):
+            window = values[i:i + window_size]
+            mean = np.mean(window)
+            std = np.std(window)
+            n = len(window)
+            
+            # Calculate 95% confidence interval using t-distribution
+            # t-value for 95% confidence with n-1 degrees of freedom
+            t_value = stats.t.ppf((1 + confidence) / 2, n - 1)
+            margin = t_value * (std / np.sqrt(n))
+            
+            smoothed.append(mean)
+            lower_bounds.append(mean - margin)
+            upper_bounds.append(mean + margin)
+        
+        return smoothed, lower_bounds, upper_bounds
 
     def plot_at_interval(self, epoch, interval):
         """Plot every N epochs."""

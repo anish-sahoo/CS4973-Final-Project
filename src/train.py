@@ -10,9 +10,10 @@ import torch.optim as optim
 from tqdm import tqdm
 
 import config
-from datasets.mpiigaze_dataset import MPIIGazeDataset
+from datasets.mpiigaze_dataset import MPIIGazeDataset, MPIIGazeNormalizedDataset
 from models.gaze_model import GazeNet
 from visualizer import TrainingVisualizer
+from utils import angular_error_loss
 
 
 def get_device():
@@ -40,6 +41,10 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
     model.train()
     total_loss = 0
     num_batches = len(train_loader)
+    valid_batches = 0
+    
+    # Get gradient clipping config
+    grad_clip = getattr(config, 'GRAD_CLIP_MAX_NORM', None)
     
     # Initialize GradScaler for mixed precision training
     scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
@@ -59,21 +64,36 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
             pred = model(left_imgs, right_imgs, head)
             loss = criterion(pred, gaze)
         
+        # Check for NaN/Inf
+        if torch.isnan(loss) or torch.isinf(loss):
+            print(f"\nWarning: NaN/Inf loss detected at batch {batch_idx}, skipping...")
+            continue
+        
         # Scale loss and backward
         scaler.scale(loss).backward()
+        
+        # Gradient clipping
+        if grad_clip is not None:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        
         scaler.step(optimizer)
         scaler.update()
         
         batch_loss = loss.item()
         total_loss += batch_loss
+        valid_batches += 1
         
         # Log to tensorboard at intervals
         step = epoch * num_batches + batch_idx
-        if (batch_idx + 1) % log_interval == 0:
+        # Log to visualizer every 100 steps to reduce storage
+        if step % 100 == 0:
             visualizer.log_train_loss(batch_loss, epoch, step=step)
+        # Update progress bar at configured interval
+        if (batch_idx + 1) % log_interval == 0:
             progress_bar.set_postfix({'loss': f'{batch_loss:.4f}'})
     
-    avg_loss = total_loss / num_batches
+    avg_loss = total_loss / max(valid_batches, 1)
     return avg_loss
 
 
@@ -100,8 +120,12 @@ def train():
     visualizer = TrainingVisualizer(log_dir=config.LOG_DIR, tb_enabled=use_tensorboard)
     
     # Load dataset
-    print(f"Loading dataset from {config.CSV_PATH}...")
-    dataset = MPIIGazeDataset(config.CSV_PATH)
+    if getattr(config, 'USE_NORMALIZED', False):
+        print(f"Loading normalized dataset from {config.NORMALIZED_ROOT}...")
+        dataset = MPIIGazeNormalizedDataset(config.NORMALIZED_ROOT)
+    else:
+        print(f"Loading dataset from {config.CSV_PATH}...")
+        dataset = MPIIGazeDataset(config.CSV_PATH)
     
     # Determine dataset size based on mode
     if mode == 'short':
@@ -130,12 +154,52 @@ def train():
     # Initialize model
     print("Initializing model...")
     model = GazeNet().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=config.LR)
-    criterion = nn.MSELoss()
+    
+    # Select optimizer based on config
+    optimizer_type = getattr(config, 'OPTIMIZER', 'adam').lower()
+    weight_decay = getattr(config, 'WEIGHT_DECAY', 0.0)
+    
+    if optimizer_type == 'adamw':
+        optimizer = optim.AdamW(model.parameters(), lr=config.LR, weight_decay=weight_decay)
+        optimizer_name = f'AdamW (lr={config.LR}, wd={weight_decay})'
+    elif optimizer_type == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=config.LR, momentum=0.9, weight_decay=weight_decay)
+        optimizer_name = f'SGD (lr={config.LR}, momentum=0.9, wd={weight_decay})'
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=config.LR, weight_decay=weight_decay)
+        optimizer_name = f'Adam (lr={config.LR}, wd={weight_decay})'
+    
+    # Setup learning rate scheduler
+    scheduler_type = getattr(config, 'LR_SCHEDULER', 'none').lower()
+    scheduler = None
+    scheduler_name = 'None'
+    
+    if scheduler_type == 'cosine':
+        lr_min = getattr(config, 'LR_MIN', 1e-6)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=lr_min)
+        scheduler_name = f'CosineAnnealing (min_lr={lr_min})'
+    elif scheduler_type == 'step':
+        step_size = getattr(config, 'LR_STEP_SIZE', 10)
+        gamma = getattr(config, 'LR_GAMMA', 0.1)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        scheduler_name = f'StepLR (step={step_size}, gamma={gamma})'
+    elif scheduler_type == 'plateau':
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+        scheduler_name = 'ReduceLROnPlateau (factor=0.5, patience=5)'
+    
+    # Select loss function based on config
+    loss_fn_type = getattr(config, 'LOSS_FUNCTION', 'mse').lower()
+    if loss_fn_type == 'angular':
+        criterion = angular_error_loss
+        criterion_name = 'Angular Error Loss'
+    else:
+        criterion = nn.MSELoss()
+        criterion_name = 'MSE Loss'
     
     print(f"Model: {model.__class__.__name__}")
-    print(f"Optimizer: Adam (lr={config.LR})")
-    print(f"Criterion: MSELoss")
+    print(f"Optimizer: {optimizer_name}")
+    print(f"LR Scheduler: {scheduler_name}")
+    print(f"Criterion: {criterion_name}")
     print(f"Batch size: {config.BATCH_SIZE}")
     print()
     
@@ -151,7 +215,23 @@ def train():
         if (epoch + 1) % config.PLOT_SAVE_INTERVAL == 0 or (epoch + 1) == num_epochs:
             visualizer.plot()
         
-        print(f"Epoch {epoch+1}/{num_epochs} - Avg Loss: {avg_loss:.4f}")
+        # Step the learning rate scheduler
+        if scheduler is not None:
+            if scheduler_type == 'plateau':
+                scheduler.step(avg_loss)
+            else:
+                scheduler.step()
+            # Log current learning rate
+            current_lr = optimizer.param_groups[0]['lr']
+            if use_tensorboard and visualizer.writer:
+                visualizer.writer.add_scalar('Learning_Rate', current_lr, epoch)
+        
+        print(f"Epoch {epoch+1}/{num_epochs} - Avg Loss: {avg_loss:.4f}", end='')
+        if scheduler is not None:
+            print(f" - LR: {optimizer.param_groups[0]['lr']:.6f}")
+        else:
+            print()
+            
         if avg_loss < best_loss:
             best_loss = avg_loss
             checkpoint_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_best_{mode}.pth')

@@ -126,3 +126,52 @@ def compute_angular_error(pred, target):
     angular_error = np.arccos(dot_product) * 180.0 / np.pi
     return angular_error
 
+
+def angular_error_loss(pred, target):
+    """Compute angular error loss for training (PyTorch version).
+    
+    Args:
+        pred: (batch, 2) tensor of [pitch, yaw] in radians
+        target: (batch, 2) tensor of [pitch, yaw] in radians
+    
+    Returns:
+        Mean angular error in radians
+    """
+    import torch
+    
+    # Clamp input angles to reasonable range to prevent extreme values
+    pred = torch.clamp(pred, -np.pi, np.pi)
+    target = torch.clamp(target, -np.pi, np.pi)
+    
+    # Convert pitch/yaw to 3D unit vectors
+    pred_x = -torch.cos(pred[:, 0]) * torch.sin(pred[:, 1])
+    pred_y = -torch.sin(pred[:, 0])
+    pred_z = -torch.cos(pred[:, 0]) * torch.cos(pred[:, 1])
+    pred_vec = torch.stack([pred_x, pred_y, pred_z], dim=1)
+    
+    target_x = -torch.cos(target[:, 0]) * torch.sin(target[:, 1])
+    target_y = -torch.sin(target[:, 0])
+    target_z = -torch.cos(target[:, 0]) * torch.cos(target[:, 1])
+    target_vec = torch.stack([target_x, target_y, target_z], dim=1)
+    
+    # Normalize vectors with better numerical stability
+    pred_norm = torch.norm(pred_vec, dim=1, keepdim=True)
+    target_norm = torch.norm(target_vec, dim=1, keepdim=True)
+    pred_vec = pred_vec / torch.clamp(pred_norm, min=1e-6)
+    target_vec = target_vec / torch.clamp(target_norm, min=1e-6)
+    
+    # Compute angular error with numerical stability
+    dot_product = torch.sum(pred_vec * target_vec, dim=1)
+    # Clamp more aggressively to avoid acos gradient issues near -1 and 1
+    dot_product = torch.clamp(dot_product, -0.999999, 0.999999)
+    angular_error = torch.acos(dot_product)
+    
+    # Check for any NaN in the loss before returning
+    if torch.isnan(angular_error).any():
+        print("Warning: NaN detected in angular error computation")
+        angular_error = angular_error[~torch.isnan(angular_error)]
+        if len(angular_error) == 0:
+            return torch.tensor(0.0, device=pred.device, requires_grad=True)
+    
+    return angular_error.mean()
+

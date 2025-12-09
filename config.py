@@ -10,34 +10,43 @@ Single variable change to select device: set DEVICE = 'cuda' or 'mps' or 'cpu'
 DEVICE = 'auto'
 
 # Training defaults
-BATCH_SIZE = 512  # Increased for 4090
+BATCH_SIZE = 64
 LR = 1e-3
-EPOCHS = 40
-NUM_WORKERS = 16  # Increased workers
-PIN_MEMORY = True  # Speeds up data transfer to CUDA
+EPOCHS = 30
+NUM_WORKERS = 4
+PIN_MEMORY = False
 LOG_INTERVAL = 10  # Log more frequently since batches are larger
 PLOT_SAVE_INTERVAL = 1  # how often to save the png plots (in epochs)
 
-# Training Mode: 'short' (quick test on small subset) or 'complete' (full dataset)
-TRAIN_MODE = 'complete'
-# Tensorboard: True to enable logging, False to disable
-USE_TENSORBOARD = True
+# Optimizer: 'adam', 'adamw', 'sgd'
+OPTIMIZER = 'adamw'  # AdamW generally works better with weight decay
+WEIGHT_DECAY = 1e-4  # L2 regularization
 
-# Evaluation defaults
+# Gradient clipping to prevent exploding gradients
+GRAD_CLIP_MAX_NORM = 1.0  # Set to None to disable
+
+# Learning rate scheduler: 'cosine', 'step', 'plateau', 'none'
+LR_SCHEDULER = 'cosine'  # Cosine annealing with warm restarts
+LR_STEP_SIZE = 10  # For 'step' scheduler: decay every N epochs
+LR_GAMMA = 0.1  # For 'step' scheduler: multiply LR by this factor
+LR_MIN = 1e-6  # Minimum LR for cosine scheduler
+
+# Loss function: 'mse' or 'angular'
+LOSS_FUNCTION = 'angular'
+TRAIN_MODE = 'complete'
+USE_TENSORBOARD = True
+USE_NORMALIZED = True  # if True, load normalized eye patches from .mat files
+
 EVAL_SAMPLE_SIZE = 1000
 EVAL_BATCH_SIZE = 64
 
-# Paths
 DATA_DIR = 'data'
 LOG_DIR = 'runs'
 CHECKPOINT_DIR = 'checkpoints'
-
-# MPIIGaze specific paths
 ANNOT_DIR = os.path.join(DATA_DIR, 'MPIIGaze', 'Annotation Subset')
 IMG_ROOT = os.path.join(DATA_DIR, 'MPIIGaze', 'Data', 'Original')
 OUTPUT = os.path.join(DATA_DIR, 'mpiigaze_landmarks.csv')
-
-# Default CSV path to dataset labels (set to None to use RandomEyeDataset fallback)
+NORMALIZED_ROOT = os.path.join(DATA_DIR, 'MPIIGaze', 'Data', 'Normalized')
 CSV_PATH = os.path.join(DATA_DIR, 'mpiigaze_two_eye.csv')
 
 # Mediapipe face mesh indices for head pose estimation (6pt model)

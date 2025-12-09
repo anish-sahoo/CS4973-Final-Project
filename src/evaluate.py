@@ -10,7 +10,7 @@ from tqdm import tqdm
 import random
 
 import config
-from datasets.mpiigaze_dataset import MPIIGazeDataset
+from datasets.mpiigaze_dataset import MPIIGazeDataset, MPIIGazeNormalizedDataset
 from models.gaze_model import GazeNet
 from utils import compute_angular_error
 from infer_realtime import find_best_model
@@ -23,8 +23,12 @@ def evaluate():
     print(f"Using device: {device}")
 
     # Load dataset
-    print(f"Loading dataset from {config.CSV_PATH}...")
-    dataset = MPIIGazeDataset(config.CSV_PATH)
+    if getattr(config, 'USE_NORMALIZED', False):
+        print(f"Loading normalized dataset from {config.NORMALIZED_ROOT}...")
+        dataset = MPIIGazeNormalizedDataset(config.NORMALIZED_ROOT)
+    else:
+        print(f"Loading dataset from {config.CSV_PATH}...")
+        dataset = MPIIGazeDataset(config.CSV_PATH)
     total_len = len(dataset)
     
     if sample_size > total_len:
