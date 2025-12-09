@@ -117,7 +117,7 @@ def find_best_model():
         
     # Try to find 'gaze_best_complete.pth' first, then 'gaze_best_short.pth'
     models = [
-        checkpoint_dir / 'gaze_best_complete.pth',
+        checkpoint_dir / 'gaze_best_train_complete.pth',
         checkpoint_dir / 'gaze_final_complete.pth',
         checkpoint_dir / 'gaze_best_short.pth',
         checkpoint_dir / 'gaze_final_short.pth'

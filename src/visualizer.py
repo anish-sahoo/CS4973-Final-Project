@@ -150,7 +150,7 @@ class TrainingVisualizer:
         ax2.set_title('Training Progress (Step-level)', fontsize=14, fontweight='bold')
         ax2.legend(fontsize=10)
         ax2.grid(True, alpha=0.3)
-        ax2.set_ylim(top=0.2)  # Limit y-axis upper bound to 0.2
+        ax2.set_ylim(0, 0.2)  # Limit y-axis from 0 to 0.2
         
         # Plot 3: Evaluation Metrics
         if self.metrics['val_error']:
