@@ -13,7 +13,7 @@ def main():
     want to use new plots."""
     
     metrics_path = 'runs/metrics.json'
-    output_path = 'runs/generated_plot.png'
+    output_path = 'visualization/generated_plot.png'
 
     if not os.path.exists(metrics_path):
         print(f"Metrics file not found: {metrics_path}")

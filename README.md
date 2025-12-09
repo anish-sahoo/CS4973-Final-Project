@@ -55,13 +55,13 @@ python3 src/calibration.py
 ### The Calibration Process
 
 1.  **Initialization**: The script will load your best model and open a full-screen window.
-2.  **9-Point Grid**: You will be presented with a sequence of 9 targets (Red Circles) covering the screen (corners, edges, and center).
+2.  **25-Point Grid**: You will be presented with a sequence of 25 targets (Red Circles) covering the screen (corners, edges, and center).
 3.  **Capture**:
     *   Look steadily at the **Red Circle**.
     *   Press the **SPACEBAR**.
     *   The circle will turn **Green** for 1 second while it collects gaze samples.
     *   Once finished, the next target will appear.
-4.  **Fitting**: After all 9 points are collected, the system calculates a mapping function (Polynomial Regression).
+4.  **Fitting**: After all 25 points are collected, the system calculates a mapping function (Polynomial Regression).
 5.  **Testing**: The system immediately enters "Test Mode". A green crosshair/circle will appear on screen indicating where the model thinks you are looking.
 6.  **Save**: The calibration parameters are automatically saved to `calibration.pkl` in the current directory.
 
@@ -79,5 +79,39 @@ python3 src/calibration.py
 *   **Eyes**: Open your eyes normally. Squinting or widening them unnaturally can affect predictions.
 
 
-demo.py
-1. Real-time demo: (TBD)
+## Demo/Inference:
+1) Ensure you have calibrated the model, otherwise results will be incomprehensible
+2) Run `python3 src/demo.py` to use the inference ui
+
+## Project Structure
+```bash
+.
+├── calibration.pkl         # Saved calibration parameters (generated after running calibration.py)
+├── config.py               # Global configuration settings (paths, hyperparameters, device)
+├── main.py                 # Main entry point for training the model
+├── paper/
+│   ├── main.pdf
+│   ├── main.tex
+│   └── neurips_2020.sty
+├── README.md               # Project documentation
+├── requirements.txt        # Python dependencies
+├── src/
+│   ├── calibration.py      # Interactive calibration tool (collects points to map gaze to screen)
+│   ├── datasets/           # PyTorch dataset implementations for MPIIGaze
+│   ├── demo.py             # User-facing demo application (controls cursor with eyes)
+│   ├── evaluate.py         # Script to evaluate model performance on test set
+│   ├── infer_realtime.py   # Core inference engine (Webcam -> Face Mesh -> Gaze Vector)
+│   ├── models/             # Neural network architecture definitions (GazeNet)
+│   ├── train.py            # Training loop implementation
+│   ├── utils.py            # Helper functions for image processing and geometry
+│   └── visualizer.py       # Visualization utilities for training monitoring
+├── utils/
+│   ├── create_csv.py       # Helper to parse dataset structure
+│   ├── download_data.sh    # Script to download MPIIGaze dataset
+│   └── two_eye_csv_generator.py # Generates the main training CSV from raw data
+└── visualization/
+    ├── create_model_diagram.py # Generates the network architecture diagram
+    ├── gaze_net_architecture.png # Visual representation of the model
+    ├── generated_plot.png  # Sample output plots
+    └── plot_generator.py   # Script to create training/evaluation plots
+```

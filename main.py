@@ -12,11 +12,9 @@ def main():
     print("       Gaze Tracking Project - Main Pipeline      ")
     print("==================================================")
     
-    # Step 1: Train
     print("\n>>> Step 1: Training Model")
     train()
     
-    # Step 2: Evaluate
     print("\n>>> Step 2: Evaluating Model")
     evaluate()
     
