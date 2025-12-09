@@ -13,7 +13,7 @@ import config
 from datasets.mpiigaze_dataset import MPIIGazeDataset, MPIIGazeNormalizedDataset
 from models.gaze_model import GazeNet
 from visualizer import TrainingVisualizer
-from utils import angular_error_loss
+from utils import angular_error_loss, compute_angular_error
 
 
 def get_device():
@@ -97,6 +97,101 @@ def train_epoch(model, train_loader, optimizer, criterion, device, epoch, visual
     return avg_loss
 
 
+def evaluate_model(model, dataset, device, sample_size=5000, batch_size=64):
+    """Evaluate model on a subset of the dataset."""
+    import random
+    import numpy as np
+    
+    total_len = len(dataset)
+    if sample_size > total_len:
+        indices = list(range(total_len))
+    else:
+        indices = random.sample(range(total_len), sample_size)
+    
+    subset = Subset(dataset, indices)
+    loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=False)
+    
+    model.eval()
+    all_errors = []
+    
+    with torch.no_grad():
+        for left_imgs, right_imgs, head, gaze in tqdm(loader, desc="Evaluating", leave=False):
+            left_imgs = left_imgs.to(device)
+            right_imgs = right_imgs.to(device)
+            head = head.to(device)
+            
+            pred = model(left_imgs, right_imgs, head)
+            pred_np = pred.cpu().numpy()
+            gaze_np = gaze.numpy()
+            
+            errors = compute_angular_error(pred_np, gaze_np)
+            all_errors.extend(errors)
+    
+    model.train()
+    
+    all_errors = np.array(all_errors)
+    mean_error = np.mean(all_errors)
+    acc_5 = np.mean(all_errors < 5.0) * 100
+    acc_10 = np.mean(all_errors < 10.0) * 100
+    
+    return mean_error, acc_5, acc_10
+
+
+def evaluate_on_loader(model, loader, device):
+    """Evaluate model on a given dataloader (for validation set)."""
+    import numpy as np
+    
+    model.eval()
+    all_errors = []
+    
+    with torch.no_grad():
+        for left_imgs, right_imgs, head, gaze in tqdm(loader, desc="Validating", leave=False):
+            left_imgs = left_imgs.to(device)
+            right_imgs = right_imgs.to(device)
+            head = head.to(device)
+            
+            pred = model(left_imgs, right_imgs, head)
+            pred_np = pred.cpu().numpy()
+            gaze_np = gaze.numpy()
+            
+            errors = compute_angular_error(pred_np, gaze_np)
+            all_errors.extend(errors)
+    
+    model.train()
+    
+    all_errors = np.array(all_errors)
+    mean_error = np.mean(all_errors)
+    acc_5 = np.mean(all_errors < 5.0) * 100
+    acc_10 = np.mean(all_errors < 10.0) * 100
+    
+    return mean_error, acc_5, acc_10
+
+
+def evaluate_loss(model, loader, criterion, device):
+    """Evaluate loss on a given dataloader."""
+    model.eval()
+    total_loss = 0
+    num_batches = 0
+    
+    with torch.no_grad():
+        for left_imgs, right_imgs, head, gaze in loader:
+            left_imgs = left_imgs.to(device)
+            right_imgs = right_imgs.to(device)
+            head = head.to(device)
+            gaze = gaze.to(device)
+            
+            pred = model(left_imgs, right_imgs, head)
+            loss = criterion(pred, gaze)
+            
+            if not torch.isnan(loss) and not torch.isinf(loss):
+                total_loss += loss.item()
+                num_batches += 1
+    
+    model.train()
+    
+    return total_loss / max(num_batches, 1)
+
+
 def train():
     """
     Train the gaze tracking model.
@@ -140,15 +235,37 @@ def train():
     else:
         raise ValueError(f"Invalid mode: {mode}. Choose 'short' or 'complete'.")
     
-    # Create dataloader
-    loader = DataLoader(
-        dataset, 
+    # Split into train and validation sets
+    val_split = getattr(config, 'VAL_SPLIT', 0.1)
+    dataset_size = len(dataset)
+    val_size = int(dataset_size * val_split)
+    train_size = dataset_size - val_size
+    
+    # Create random split
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        dataset, [train_size, val_size],
+        generator=torch.Generator().manual_seed(42)  # Fixed seed for reproducibility
+    )
+    
+    print(f"Split: {train_size} training, {val_size} validation samples")
+    
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset, 
         batch_size=config.BATCH_SIZE, 
         shuffle=True,
         num_workers=config.NUM_WORKERS,
         pin_memory=config.PIN_MEMORY,
         persistent_workers=True,
         prefetch_factor=2
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config.EVAL_BATCH_SIZE,
+        shuffle=False,
+        num_workers=config.NUM_WORKERS,
+        pin_memory=config.PIN_MEMORY
     )
     
     # Initialize model
@@ -205,20 +322,56 @@ def train():
     
     # Training loop
     best_loss = float('inf')
+    best_eval_error = float('inf')
+    best_val_error = float('inf')
+    eval_interval = getattr(config, 'EVAL_INTERVAL', 2)
+    eval_sample_size = getattr(config, 'EVAL_SAMPLE_SIZE', 5000)
     
     for epoch in range(num_epochs):
         avg_loss = train_epoch(
-            model, loader, optimizer, criterion, device, 
+            model, train_loader, optimizer, criterion, device, 
             epoch, visualizer, config.LOG_INTERVAL
         )
-        visualizer.log_epoch(epoch, avg_loss)
+        
+        # Evaluate on validation set every epoch (fast, full set)
+        print(f"\nRunning validation...")
+        val_mean_error, val_acc_5, val_acc_10 = evaluate_on_loader(
+            model, val_loader, device
+        )
+        
+        # Compute validation loss for overfitting detection
+        val_loss = evaluate_loss(model, val_loader, criterion, device)
+        
+        visualizer.log_epoch(epoch, avg_loss, val_loss)
+        visualizer.log_eval_metrics(val_mean_error, val_acc_5, val_acc_10, epoch)
+        
+        print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}")
+        print(f"Val - Mean Error: {val_mean_error:.2f}°, Acc@5°: {val_acc_5:.1f}%, Acc@10°: {val_acc_10:.1f}%")
+        
+        # Run evaluation on larger random sample every N epochs
+        if (epoch + 1) % eval_interval == 0 or (epoch + 1) == num_epochs:
+            print(f"\nRunning evaluation on {eval_sample_size} random samples...")
+            mean_error, acc_5, acc_10 = evaluate_model(
+                model, dataset, device, 
+                sample_size=eval_sample_size, 
+                batch_size=config.EVAL_BATCH_SIZE
+            )
+            print(f"Test - Mean Error: {mean_error:.2f}°, Acc@5°: {acc_5:.1f}%, Acc@10°: {acc_10:.1f}%")
+            
+            # Save best model based on evaluation error
+            if mean_error < best_eval_error:
+                best_eval_error = mean_error
+                checkpoint_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_best_eval_{mode}.pth')
+                torch.save(model.state_dict(), checkpoint_path)
+                print(f"Best eval model saved to {checkpoint_path}")
+        
         if (epoch + 1) % config.PLOT_SAVE_INTERVAL == 0 or (epoch + 1) == num_epochs:
             visualizer.plot()
         
         # Step the learning rate scheduler
         if scheduler is not None:
             if scheduler_type == 'plateau':
-                scheduler.step(avg_loss)
+                scheduler.step(val_loss)  # Use validation loss for plateau scheduler
             else:
                 scheduler.step()
             # Log current learning rate
@@ -226,17 +379,21 @@ def train():
             if use_tensorboard and visualizer.writer:
                 visualizer.writer.add_scalar('Learning_Rate', current_lr, epoch)
         
-        print(f"Epoch {epoch+1}/{num_epochs} - Avg Loss: {avg_loss:.4f}", end='')
         if scheduler is not None:
-            print(f" - LR: {optimizer.param_groups[0]['lr']:.6f}")
-        else:
-            print()
+            print(f"LR: {optimizer.param_groups[0]['lr']:.6f}")
             
+        # Save best models
         if avg_loss < best_loss:
             best_loss = avg_loss
-            checkpoint_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_best_{mode}.pth')
+            checkpoint_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_best_train_{mode}.pth')
             torch.save(model.state_dict(), checkpoint_path)
-            print(f"Best model saved to {checkpoint_path}")
+            print(f"Best training model saved to {checkpoint_path}")
+        
+        if val_mean_error < best_val_error:
+            best_val_error = val_mean_error
+            checkpoint_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_best_val_{mode}.pth')
+            torch.save(model.state_dict(), checkpoint_path)
+            print(f"Best validation model saved to {checkpoint_path}")
     
     model_path = os.path.join(config.CHECKPOINT_DIR, f'gaze_final_{mode}.pth')
     torch.save(model.state_dict(), model_path)

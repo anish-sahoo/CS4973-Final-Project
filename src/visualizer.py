@@ -20,6 +20,9 @@ class TrainingVisualizer:
         self.metrics = {
             'train_loss': [],
             'val_loss': [],
+            'val_error': [],  # Angular error in degrees
+            'val_acc_5': [],  # Accuracy within 5 degrees
+            'val_acc_10': [],  # Accuracy within 10 degrees
             'epoch': [],
             'step_losses': [],  # Track loss at each step
             'steps': []  # Track step numbers
@@ -71,6 +74,17 @@ class TrainingVisualizer:
         """Log validation loss."""
         if self.tb_enabled and self.writer:
             self.writer.add_scalar('Loss/val', loss, epoch)
+    
+    def log_eval_metrics(self, mean_error, acc_5, acc_10, epoch):
+        """Log evaluation metrics."""
+        self.metrics['val_error'].append(mean_error)
+        self.metrics['val_acc_5'].append(acc_5)
+        self.metrics['val_acc_10'].append(acc_10)
+        
+        if self.tb_enabled and self.writer:
+            self.writer.add_scalar('Eval/Mean_Angular_Error', mean_error, epoch)
+            self.writer.add_scalar('Eval/Accuracy_5deg', acc_5, epoch)
+            self.writer.add_scalar('Eval/Accuracy_10deg', acc_10, epoch)
 
     def log_epoch(self, epoch, train_loss, val_loss=None):
         """Log metrics for an epoch."""
@@ -91,8 +105,8 @@ class TrainingVisualizer:
         if save_path is None:
             save_path = self.plot_file
         
-        # Create figure with two subplots
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+        # Create figure with three subplots
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 14))
         
         # Plot 1: Loss vs Epoch
         if self.metrics['epoch'] and self.metrics['train_loss']:
@@ -136,6 +150,35 @@ class TrainingVisualizer:
         ax2.set_title('Training Progress (Step-level)', fontsize=14, fontweight='bold')
         ax2.legend(fontsize=10)
         ax2.grid(True, alpha=0.3)
+        ax2.set_ylim(top=0.2)  # Limit y-axis upper bound to 0.2
+        
+        # Plot 3: Evaluation Metrics
+        if self.metrics['val_error']:
+            eval_epochs = [i for i, e in enumerate(self.metrics['epoch']) if i < len(self.metrics['val_error'])]
+            ax3_twin = ax3.twinx()
+            
+            # Plot angular error on left axis
+            line1 = ax3.plot(eval_epochs, self.metrics['val_error'], 
+                           label='Mean Angular Error', marker='o', color='red', linewidth=2)
+            ax3.set_xlabel('Epoch', fontsize=12)
+            ax3.set_ylabel('Angular Error (degrees)', fontsize=12, color='red')
+            ax3.tick_params(axis='y', labelcolor='red')
+            
+            # Plot accuracies on right axis
+            line2 = ax3_twin.plot(eval_epochs, self.metrics['val_acc_5'], 
+                                 label='Acc @ 5°', marker='s', color='green', linewidth=2)
+            line3 = ax3_twin.plot(eval_epochs, self.metrics['val_acc_10'], 
+                                 label='Acc @ 10°', marker='^', color='blue', linewidth=2)
+            ax3_twin.set_ylabel('Accuracy (%)', fontsize=12, color='blue')
+            ax3_twin.tick_params(axis='y', labelcolor='blue')
+            ax3_twin.set_ylim(80, 100)  # Limit accuracy axis from 80% to 100%
+            
+            # Combine legends
+            lines = line1 + line2 + line3
+            labels = [l.get_label() for l in lines]
+            ax3.legend(lines, labels, fontsize=10, loc='upper left')
+            ax3.set_title('Evaluation Metrics', fontsize=14, fontweight='bold')
+            ax3.grid(True, alpha=0.3)
         
         plt.tight_layout()
         
