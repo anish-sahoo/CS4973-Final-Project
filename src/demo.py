@@ -8,7 +8,7 @@ import subprocess
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.infer_realtime import RealtimeGazeEngine, find_best_model
-from calibration import Calibration
+from src.models.calibration_model import Calibration
 
 def get_displays():
     """Get list of connected displays (works on macOS with xrandr or system_profiler)."""
