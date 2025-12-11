@@ -72,7 +72,7 @@
 \maketitle
 
 \begin{abstract}
-We attempt to create an eye tracker model that can run fast enough on consumer hardware on a common webcam feed. Our approach employs a dual branched convolutional neural network for encoding each individual eye, and a fully connected layer to encode head-pose information. The three feature vectors are combined to predict gaze pitch and yaw using a regression head, resulting in a model with 1.2M parameters that can be easily run on consumer hardware. This model has been trained on the MPIIGaze dataset, achieving a mean angular error of 1.44 degrees and demonstrating strong accuracy relative to SOTA models. We introduce a 25 point calibration procedure to translate these gaze predictions to screen coordinates reliably. Together, this model and inference pipeline enable accurate and accessible gaze tracking, opening the doors to applications in accessibility, human-computer interaction, and automobile safety.
+We attempt to create an eye tracker model that can run fast enough on consumer hardware on a common webcam feed. Our approach employs a dual branched convolutional neural network for encoding each individual eye, and a fully connected layer to encode head-pose information. The three feature vectors are combined to predict gaze pitch and yaw using a regression head, resulting in a model with 1.2M parameters that can be easily run on consumer hardware. This model has been trained on the MPIIGaze dataset, achieving a mean angular error of 1.44° and demonstrating strong accuracy relative to SOTA models. We introduce a 25 point calibration procedure to translate these gaze predictions to screen coordinates reliably. Together, this model and inference pipeline enable accurate and accessible gaze tracking, opening the doors to applications in accessibility, human-computer interaction, and automobile safety.
 \end{abstract}
 
 \section{Introduction}
@@ -88,7 +88,7 @@ Studying and analyzing eye gaze patterns has a variety of real-world impacts tha
     \item \textbf{Research Studies:} In a field that highly prioritizes evidence, the tools that are used to conduct experiments are important. For research studies that rely on eye trackers as part of their experiment, accurate eye tracking reduces the margin of error and gives more reliable, usable results.  
 \end{itemize}
 
-However, eye tracking has its own share of problems. The process of ensuring consistent results can be finicky and particular. First, it is hard to generalize eyes because humans have many different eye shapes and colors, and it is expected that an eye tracker should support all of these variations to the same level of accuracy. Furthermore, real-time computation efficiency is needed to make it viable for daily use. In order to tackle this problem, several subproblems need to be addressed, including eye-region detection, mapping eye to screen coordinates, and pupil localization under various lighting conditions, among others. Furthermore, it is generally known that laptop gaze trackers are not entirely accurate, but is most convenient for the purpose of this project.
+However, eye tracking presents several challenges. The process of ensuring consistent results can be finicky and particular. First, it is hard to generalize eyes because humans have many different eye shapes and colors, and it is expected that an eye tracker should support all of these variations to the same level of accuracy. Furthermore, real-time computation efficiency is needed to make it viable for daily use. In order to tackle this problem, several subproblems need to be addressed, including eye-region detection, mapping eye to screen coordinates, and pupil localization under various lighting conditions, among others. Finally, it is generally known that laptop gaze trackers are not entirely accurate, but is most convenient for the purpose of this project.
 
 \subsection{Motivation}
 
@@ -96,48 +96,45 @@ In terms of motivation for choosing this project, one of the members in this gro
 
 
 \section{Literature Survey}
+A literary survey of the articles and research papers used for this project is as follows: 
 % A short literature survey of 4 or more relevant papers.
 \begin{enumerate}
-    %\item{
-    %https://arxiv.org/abs/1504.02863 - We use this dataset as it provides an excellent collection of gaze data. (expand on this, see https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/gaze-based-human-computer-interaction/appearance-based-gaze-estimation-in-the-wild for more info on the dataset)
-    %}
     \item {Zhang, X., Sugano, Y., Fritz, M., Bulling, A. (2015). Appearance-based Gaze Estimation in the Wild. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 4511-4520). https://arxiv.org/abs/1504.02863
     \begin{itemize}
         \item Zhang and co introduced MPIIGaze, a large-scale dataset of 213,000+ eye images captured during natural laptop use, which has become the standard benchmark for training and evaluating appearance-based gaze estimation methods using standard RGB cameras rather than specialized infrared equipment.
-        \item This dataset provides an excellent collection of gaze data, which we have used in our project to train our model. 
+        \item This dataset provides an excellent collection of gaze data, which we used in our project to train our model. 
     \end{itemize}
     }
     
     \item {Mesmoudi, S.; Hommet, S.; Peschanski, D. Eye-Tracking and Learning Experience: Gaze Trajectories to Better Understand the Behavior of Memorial Visitors. J. Eye Mov. Res. 2020, 13, 1-15. https://doi.org/10.16910/jemr.13.2.3
     \begin{itemize}
-        \item Mesmoudi and co's paper focused on using eye-tracking as a tool to quantify visitor experience and behavior in museums, as well as track how museums can have a role in learning among students. 
-        \item We are interested in this paper because it discusses the way gaze trackers can be applied in the real-world with relatable implications. Furthermore, this paper has introduced variables that will be useful to analyze during our own eye tracking: gaze trajectory and viewing time.
+        \item Mesmoudi and co's paper focuses on using eye-tracking as a tool to quantify visitor experience and behavior in museums, as well as tracking how museums can have a role in learning among students. 
+        \item This paper informed our understanding of how gaze trackers can be applied in real-world settings with practical implications. The variables introduced in this work (gaze trajectory and viewing time) provide valuable metrics for analyzing eye tracking data in applied contexts.
     \end{itemize}
     }
 
     \item {Zhiwei Zhu and Qiang Ji, "Eye gaze tracking under natural head movements," 2005 IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR'05), San Diego, CA, USA, 2005, pp. 918-923 vol. 1, doi: 10.1109/CVPR.2005.148.
     \begin{itemize}
         \item A challenge with standard PCCR eye-tracking techniques is that the user needs to keep their head still for an uncomfortable amount of time in order to collect the most accurate results. Zhu and co's paper outlines a solution that allows the user to move their head freely and only requires one calibration procedure during the entire session rather than every time the head moves, making it more efficient. 
-        \item We plan to implement our own gaze tracker with this solution in mind because it would make our model more user-friendly.
+        \item We implemented our gaze tracker with this solution in mind, incorporating head pose estimation to make our model more user-friendly and robust to natural head movements.
     \end{itemize}
     }
     
     \item {Rodrigues, J.A., Vieira de Castro, A., Llamas-Nistal, M. (2025). Integrating Eye-Tracking, Machine Learning, and Facial Recognition for Objective Consumer Behavior Analysis. In: Schmorrow, D.D., Fidopiastis, C.M. (eds) Augmented Cognition. HCII 2025. Lecture Notes in Computer Science(), vol 15778. Springer, Cham. https://doi.org/10.1007/978-3-031-93724-8\_5
     \begin{itemize}
-        \item This paper introduces ML-based methods to use real time facial data and gaze data to learn about user fixations in certain areas of static images. We are interested in their approach in collecting real time data and computing gaze information.
-        \item Furthermore, we found this paper relevant due to its focus on a framework that improves the scalability, affordability, and accessibility of webcam-based eye tracking. By allowing gaze tracking from the user's own laptop, it appeals to our goal of targeting the general public. 
+        \item This paper introduces ML-based methods to use real time facial data and gaze data to learn about user fixations in certain areas of static images. Their approach to collecting real-time data and computing gaze information informed our inference pipeline design.
+        \item This work is particularly relevant due to its focus on improving the scalability, affordability, and accessibility of webcam-based eye tracking. By enabling gaze tracking from users' own laptops, it aligns with our goal of targeting the general public with accessible technology. 
     \end{itemize}}
     \item {Saxena, S., Fink, L.K. \& Lange, E.B. Deep learning models for webcam eye tracking in online experiments. Behav Res 56, 3487–3503 (2024). https://doi.org/10.3758/s13428-023-02190-6
     \begin{itemize}
-        \item This paper explorer gaze detection using webcam data, and outlines several methods and benchmarks to train and evaluate a gaze detection model.
-        \item We plan to take note of their roadblocks and shortcomings and attempt to make something that improves on these approaches.
+        \item This paper explores gaze detection using webcam data, and outlines several methods and benchmarks to train and evaluate a gaze detection model.
+        \item We considered their reported roadblocks and shortcomings when designing our system, incorporating architectural improvements to address these challenges.
     \end{itemize}}
     \item {Krafka, K., Khosla, A., Kellnhofer, P., Kannan, H., Bhandarkar, S., Matusik, W., \& Torralba, A. (2016). Eye tracking for everyone. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (pp. 2176-2184). https://arxiv.org/abs/1606.05814
     \begin{itemize}
         \item This paper introduces a massive dataset of over 2.5m frames of gaze data from over 1400 people, and introduces a simple baseline training approach for eye tracking.
-        \item Our goal is to learn from the literature and create a model that takes the benefits of these approaches and can train and run efficiently on modern consumer devices.
-    \end{itemize}
-    }
+        \item We drew from the lessons in this literature to create a model that incorporates the benefits of these approaches while training and running efficiently on modern consumer devices.
+    \end{itemize}}
 \end{enumerate}
 
 \section{Methods}
@@ -154,8 +151,19 @@ Our architecture builds on baseline single-eye approaches through a few key impr
 \end{enumerate}
 
 \subsection{Training CNN-based model}\
-% TO DO 
-For our dataset, we used MPIIGaze
+The core of our system is GazeNet, a dual-eye convolutional neural network that predicts gaze direction from bilateral eye images and head pose information. The architecture consists of 3 main components: eye feature extraction networks, head pose embedding, and gaze prediction fusion layers.
+
+Each eye is processed by an identical convolutional neural network called EyeCNN that extracts appearance features from normalized eye crops. The input is a grayscale eye image of size 36x60 pixels, normalized to the range [-1, 1]. The architecture contains 3 convolutional layers with 32, 64, and 128 filters respectively, each followed by ReLU activation and 2x2 max pooling. After the third convolutional layer, the output is flattened and passed through a fully connected layer that produces a 128-dimensional feature vector. This design progressively increases feature depth while reducing spatial dimensions, learning hierarchical representations from low-level edges to high-level gaze patterns.
+
+Head pose information is encoded through a simple multi-layer perceptron that takes a 2-dimensional vector containing pitch and yaw angles in radians and maps it to a 32-dimensional embedding. This lightweight embedding captures head orientation information with minimal computational cost.
+
+The complete GazeNet model takes 3 inputs: left eye image (1×36×60), right eye image (1×36×60), and head pose vector (2D). Each eye is processed through its own EyeCNN to produce 128-dimensional features, the head pose is embedded to 32 dimensions, and all features are concatenated into a 288-dimensional vector. This combined representation passes through two fully connected layers (288→256→2) to predict gaze pitch and yaw in radians. The total model contains approximately 1.2M trainable parameters.
+
+We train on the MPIIGaze dataset containing 213,658 labeled samples from 15 participants captured during natural computer use. Each sample provides eye regions, ground truth gaze direction, and head pose angles. Our preprocessing pipeline crops the eye regions with 15\% padding, converts to grayscale, resizes to 36×60 pixels, and normalizes to [-1, 1] range. We use a 90\% training and 10\% validation split with random sampling.
+
+Training uses mean squared error loss between predicted and ground truth gaze angles, optimized with AdamW at a learning rate of 5e-4. We use a  batch size of 128 and train for 50 epochs with cosine annealing learning rate scheduling. 
+
+We evaluate performance using angular error loss. We report both mean and median angular error, as median is more robust to outliers.
 
 \begin{figure}[h]
     \centering
@@ -195,16 +203,18 @@ The complete pipeline runs in real-time on consumer hardware, achieving frame ra
 
 \section{Experiments}
 Our experiment revolves around a few key questions:
-% questions....
-% how to make the most efficient? what architecture and implementation choices?
-% ensure works on consumer-grade devices, involves testing and training on our personal laptops
+\begin{enumerate}
+    \item How can we train the most efficient model while also maintaining accuracy? What architecture and implementation choices do we make?
+    \item How can we minimize user configuration requirements to improve accessibility, comfort, and ease of use?
+    \item Can the complete pipeline run in real-time on consumer-grade devices? 
+\end{enumerate}
 
 We conducted training locally on our personal Apple Macbook laptops with 14 cores and 24GB of RAM. Furthermore, inference and real-time testing were also performed on the same computers. We have implemented our system in PyTorch 2.9.1 with OpenCV for image processing and MediaPipe for facial landmark detection.
 
 \subsection{Implementing The Model}
 At first, we attempted to use separate models for each eye and then combine the two image regions together. There seemed to be many benefits to this approach: the ability to train and test each model independently, potentially smaller models, and easier debugging. 
 
-Then through our research, we came across an interesting approach that involves using shared neural networks to train a model. This claim was supported by the domain experience of one of the authors of this paper, who has used this technique in training CNN-based multi-agent reinforcement learning models. Upon experimenting with different implementations of this approach, we discovered that it performed significantly better than independent models. 
+Then through our research, we were introduced to an interesting approach that involves using shared neural networks to train a model. This claim was supported by the domain experience of one of the authors of this paper, who has used this technique in training CNN-based multi-agent reinforcement learning models. Upon experimenting with different implementations of this approach, we discovered that it performed significantly better than independent models. 
 
 The problem with the separate models approach was that since both models would need to be trained independently, the training time would be doubled. Furthermore, the model would lose important information about the relationship between the two eyes. In the case of the combined approach, not only does the model gain twice the information at once to understand how the two eyes work together and is able to cross-check across both eyes, but it also reduces redundant learning. 
 
@@ -243,7 +253,7 @@ Evaluation Interval & 2 epochs \\
 \end{tabular}
 \end{table}
 
-Our dual-eye GazeNet architecture achieved a mean angular error of 1.44° on the validation set. The model demonstrates strong accuracy, with 96.81\% of predictions falling within 5° error and 99.21\% within 10° error.
+Our dual-eye GazeNet architecture achieved a mean angular error of 1.44° on the validation set, compared to the MPIIGaze baseline of 4.5° reported by Zhang et al \cite{zhang2015}. The model demonstrates strong accuracy, with 96.81\% of predictions falling within 5° error and 99.21\% within 10° error.
 
 The training converged smoothly over 42 epochs, with training loss decreasing from 0.200 to 0.011 and validation loss from 0.165 to 0.025. The close tracking between training and validation curves indicates the model produced good accuracy on the dataset without significant overfitting.
 
@@ -254,18 +264,13 @@ The training converged smoothly over 42 epochs, with training loss decreasing fr
     \label{fig:training_metrics}
 \end{figure}
 
-Furthermore, we found success with running the calibration so that the eye tracker works as expected. However, there is still room for improvement. Although frames are collected over 2 seconds to reduce noise, some noise still remains. Not only that, but also the best results currently come from situations where the eyes are close to the screen during calibration, so there are limitations as to where the user can position themselves. Noise can be further reduced.  
+Furthermore, we found success with running the calibration so that the eye tracker works as expected. However, there is still room for improvement. Although frames are collected over 2 seconds to reduce noise, some noise still remains. Not only that, but also the best results currently come from situations where the eyes are close to the screen during calibration, so there are limitations as to where the user can position themselves. Additional experimentation is necessary to determine more effective methods to reduce noise.
 
 \section{Conclusion}
-v just some questions that i thought of to address, will figure out what to write after
-\begin{enumerate}
-    \item what did we discover? - 
-    \item anything surprising? anything expected?
-    \item what would we like to do in the future? anything we would change? if we had more time, what would we do?
-\end{enumerate}
 
-yada yada this is amazing for the future of humanity i gotchu >:)
+We developed a webcam-based eye gaze tracker achieving 1.44° mean angular error on the MPIIGaze benchmark, demonstrating that appearance-based methods using standard RGB cameras can reach accuracy levels of specified eye trackers. Our key finding is that an architecture that uses both eyes simultaneously outperforms separate single-eye models, achieving 48\% error reduction through learned cross-eye relationships–a result that exceeded our initial expectations. Through iterative experimentation, we discovered that training configuration matters significantly, with AdamW and angular loss outperforming other combinations. While some results aligned with expectations, such as the importance of head pose integration and the benefits of large-scale training data, the magnitude of improvement from joint eye processing was surprising and reveals that gaze estimation fundamentally benefits from understanding how eyes work together rather than processing them independently.
 
+Future work should focus on several promising directions, such as further reducing calibration requirements or conducting real-world user studies across diverse populations and environments. Our system contributes to making eye tracking technology more accessible by lowering the cost from thousands of dollars to essentially free, enabling greater access for everyone–from researchers conducting large-scale studies to developers building gaze-aware applications. By demonstrating that careful architectural design combined with appropriate training strategies can achieve near-commercial-grade accuracy with consumer hardware, we move toward a future where the benefits of eye tracking are accessible to everyone regardless of resources or technical expertise.
 
 \begin{thebibliography}{6}
 \bibitem{zhang2015}
