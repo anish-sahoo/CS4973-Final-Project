@@ -55,7 +55,7 @@ def main():
         calib.load(calib_path)
     else:
         print("Warning: 'calibration.pkl' not found in current directory.")
-        print("Please run 'python src/calibration.py' first.")
+        print("Please run 'python src/calibrate.py' first.")
         print("Running in uncalibrated mode.")
         calib = None
         
@@ -168,7 +168,7 @@ def main():
             engine.cap.release()
             cv2.destroyAllWindows()
             print("Launching calibration...")
-            os.system("python3 src/calibration.py")
+            os.system("python3 src/calibrate.py")
             # Restart this script to reload calibration
             os.execv(sys.executable, ['python3'] + sys.argv)
         elif key == ord('f'):

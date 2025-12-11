@@ -29,8 +29,9 @@ Dataset - https://www.kaggle.com/datasets/dhruv413/mpiigaze
    - Each image_path points to a full frame in `Data/Original`. Bounding boxes define left & right eye crop.
    - Use `utils/create_two_eye_csv.py` to generate `data/mpiigaze_two_eye.csv`
 
-3. Train: (TBD)
+3. Train:
 ```
+python3 main.py
 tensorboard --logdir runs
 ```
 
@@ -49,7 +50,7 @@ After training, you have to calibrate the gaze tracking model to your specific s
 Run the interactive calibration UI from the project root:
 
 ```bash
-python3 src/calibration.py
+python3 src/calibrate.py
 ```
 
 ### The Calibration Process
@@ -86,7 +87,7 @@ python3 src/calibration.py
 ## Project Structure
 ```bash
 .
-├── calibration.pkl         # Saved calibration parameters (generated after running calibration.py)
+├── calibration.pkl         # Saved calibration parameters (generated after running calibrate.py)
 ├── config.py               # Global configuration settings (paths, hyperparameters, device)
 ├── main.py                 # Main entry point for training the model
 ├── paper/
@@ -96,7 +97,7 @@ python3 src/calibration.py
 ├── README.md               # Project documentation
 ├── requirements.txt        # Python dependencies
 ├── src/
-│   ├── calibration.py      # Interactive calibration tool (collects points to map gaze to screen)
+│   ├── calibrate.py      # Interactive calibration tool (collects points to map gaze to screen)
 │   ├── datasets/           # PyTorch dataset implementations for MPIIGaze
 │   ├── demo.py             # User-facing demo application (controls cursor with eyes)
 │   ├── evaluate.py         # Script to evaluate model performance on test set
